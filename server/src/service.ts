@@ -8,6 +8,7 @@ import * as SessionManager from './sessionManager';
 import { Session, SessionOptions } from './session';
 import { Position } from 'vscode-languageserver';
 import { logger } from './logging';
+import { gitVersion } from './sessionManager';
 
 interface CodeWithOptions {
     code: string;
@@ -217,7 +218,8 @@ function validateSessionOptions(req: Request, res: Response): SessionOptions | u
 
     const pyrightVersion = req.body.pyrightVersion;
     if (pyrightVersion !== undefined) {
-        if (typeof pyrightVersion !== 'string' || !pyrightVersion.match(/1.[0-9]+.[0-9]+/)) {
+        // if (typeof pyrightVersion !== 'string' || !pyrightVersion.match(/1.[0-9]+.[0-9]+/)) {
+        if (pyrightVersion !== gitVersion) {
             res.status(400).json({ message: 'Invalid pyrightVersion' });
             return undefined;
         }

@@ -40,6 +40,8 @@ const pyrightLocalDir = './pyright_local';
 // Path to a manifest file that tracks usage of cached pyright versions.
 const pyrightManifestPath = path.join(pyrightLocalDir, 'manifest.json');
 
+export const gitVersion = 'https://github.com/BenjyWiener/pyright#overloadedtypes';
+
 interface PyrightManifestEntry {
     lastAccess: number;
 }
@@ -163,58 +165,60 @@ export function recycleSession(sessionId: SessionId) {
 }
 
 export async function getPyrightVersions(): Promise<string[]> {
-    return packageJson('pyright', { allVersions: true, fullMetadata: false })
-        .then((response) => {
-            let versions = Object.keys(response.versions);
+    return [gitVersion];
+    // return packageJson('pyright', { allVersions: true, fullMetadata: false })
+    //     .then((response) => {
+    //         let versions = Object.keys(response.versions);
 
-            // Filter out the really old versions (1.0.x).
-            versions = versions.filter((version) => !version.startsWith('1.0.'));
+    //         // Filter out the really old versions (1.0.x).
+    //         versions = versions.filter((version) => !version.startsWith('1.0.'));
 
-            // Return the latest version first.
-            versions = versions.reverse();
+    //         // Return the latest version first.
+    //         versions = versions.reverse();
 
-            // Limit the number of versions returned.
-            versions = versions.slice(0, maxPyrightVersionCount);
+    //         // Limit the number of versions returned.
+    //         versions = versions.slice(0, maxPyrightVersionCount);
 
-            return versions;
-        })
-        .catch((err) => {
-            throw new Error(`Failed to get versions of pyright: ${err}`);
-        });
+    //         return versions;
+    //     })
+    //     .catch((err) => {
+    //         throw new Error(`Failed to get versions of pyright: ${err}`);
+    //     });
 }
 
 export async function getPyrightLatestVersion(): Promise<string> {
-    const timeSinceLastRequest = Date.now() - lastVersionRequestTime;
+    return gitVersion;
+    // const timeSinceLastRequest = Date.now() - lastVersionRequestTime;
 
-    if (timeSinceLastRequest < timeBetweenVersionRequestsInMs) {
-        logger.info(`Returning cached latest pyright version: ${lastVersion}`);
-        return lastVersion;
-    }
+    // if (timeSinceLastRequest < timeBetweenVersionRequestsInMs) {
+    //     logger.info(`Returning cached latest pyright version: ${lastVersion}`);
+    //     return lastVersion;
+    // }
 
-    return packageJson('pyright')
-        .then((response) => {
-            if (typeof response.version === 'string') {
-                logger.info(`Received latest pyright version from npm index: ${response.version}`);
+    // return packageJson('pyright')
+    //     .then((response) => {
+    //         if (typeof response.version === 'string') {
+    //             logger.info(`Received latest pyright version from npm index: ${response.version}`);
 
-                lastVersionRequestTime = Date.now();
+    //             lastVersionRequestTime = Date.now();
 
-                if (lastVersion !== response.version) {
-                    lastVersion = response.version;
+    //             if (lastVersion !== response.version) {
+    //                 lastVersion = response.version;
 
-                    // We need to terminate all inactive sessions because an empty
-                    // version string in the session options changes meaning when
-                    // the version of pyright changes.
-                    terminateInactiveSessions();
-                }
+    //                 // We need to terminate all inactive sessions because an empty
+    //                 // version string in the session options changes meaning when
+    //                 // the version of pyright changes.
+    //                 terminateInactiveSessions();
+    //             }
 
-                return response.version;
-            }
+    //             return response.version;
+    //         }
 
-            throw new Error(`Received unexpected latest version for pyright`);
-        })
-        .catch((err) => {
-            throw new Error(`Failed to get latest version of pyright: ${err}`);
-        });
+    //         throw new Error(`Received unexpected latest version for pyright`);
+    //     })
+    //     .catch((err) => {
+    //         throw new Error(`Failed to get latest version of pyright: ${err}`);
+    //     });
 }
 
 function startSession(binaryDirPath: string, sessionOptions?: SessionOptions): Promise<SessionId> {
@@ -437,7 +441,7 @@ async function installPyright(requestedVersion: string | undefined): Promise<Ins
     }
 
     return new Promise<InstallPyrightInfo>((resolve, reject) => {
-        const dirName = path.join(pyrightLocalDir, version);
+        const dirName = path.join(pyrightLocalDir, encodeURIComponent(version));
 
         if (fs.existsSync(dirName)) {
             logger.info(`Pyright version ${version} already installed`);
@@ -448,10 +452,27 @@ async function installPyright(requestedVersion: string | undefined): Promise<Ins
 
         logger.info(`Attempting to install pyright version ${version}`);
         exec(
-            `mkdir -p ${dirName}/node_modules && cd ${dirName} && npm install pyright@${version}`,
-            (err) => {
+            `mkdir -p ${dirName}/node_modules && \
+            cd ${dirName} && \
+            git clone ${version.replace('#', ' -b ')} --depth=1 && \
+            cd pyright && \
+            npm install && \
+            npm install -g cross-env lerna && \
+            cd packages/pyright-internal && \
+            npm install && \
+            rm -rf src/tests && \
+            npm run build && \
+            cd ../pyright && \
+            npm install && \
+            npm run build && \
+            cd ../../.. && \
+            mv pyright/packages/pyright node_modules/pyright && \
+            rm -rf pyright`,
+            (err, stdout, stderr) => {
                 if (err) {
                     logger.error(`Failed to install pyright ${version}`);
+                    console.error('stdout:\n\n' + stdout);
+                    console.error('stderr:\n\n' + stderr);
                     reject(`Failed to install pyright@${version}`);
                     return;
                 }
